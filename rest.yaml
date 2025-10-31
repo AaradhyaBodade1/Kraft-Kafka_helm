@@ -1,0 +1,56 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-rest-proxy
+  namespace: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-rest-proxy
+  template:
+    metadata:
+      labels:
+        app: kafka-rest-proxy
+    spec:
+      containers:
+        - name: kafka-rest-proxy
+          image: confluentinc/cp-kafka-rest:7.5.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          env:
+            # Kafka bootstrap servers (internal cluster)
+            - name: KAFKA_REST_BOOTSTRAP_SERVERS
+              value: "kafka.kafka.svc.cluster.local:9092"
+            # REST proxy listener
+            - name: KAFKA_REST_LISTENERS
+              value: "http://0.0.0.0:8082"
+            - name: KAFKA_REST_HEAP_OPTS
+              value: "-Xmx512m -Xms256m"
+            # SASL authentication (optional, removed for now)
+            # - name: KAFKA_REST_SECURITY_PROTOCOL
+            #   value: "SASL_PLAINTEXT"
+            # - name: KAFKA_REST_SASL_MECHANISM
+            #   value: "PLAIN"
+            # - name: KAFKA_REST_SASL_JAAS_CONFIG
+            #   value: "org.apache.kafka.common.security.scram.ScramLoginModule required"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-rest-proxy
+  namespace: kafka
+  annotations:
+    # This makes the LB internal-only (within VPC)
+    cloud.google.com/load-balancer-type: "Internal"
+spec:
+  type: LoadBalancer
+  selector:
+    app: kafka-rest-proxy
+  ports:
+    - protocol: TCP
+      port: 8082
+      targetPort: 8082

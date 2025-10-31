@@ -1,0 +1,75 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-nginx-config
+  namespace: kafka
+data:
+  nginx.conf: |
+    worker_processes 1;
+
+    events {
+        worker_connections 1024;
+    }
+
+    stream {
+        upstream kafka_brokers {
+             # Kafka broker pods via Node internal IP + NodePort
+              server 10.0.2.15:31710;  # kafka-broker-0
+              server 10.0.2.16:32192;  # kafka-broker-1
+             # Kafka controller pod via Node internal IP + NodePort
+              server 10.0.2.12:31317;  # kafka-controller-0
+        }
+
+        server {
+            listen 9094;
+            proxy_pass kafka_brokers;
+            proxy_timeout 10m;
+            proxy_connect_timeout 1s;
+        }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-nginx
+  namespace: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-nginx
+  template:
+    metadata:
+      labels:
+        app: kafka-nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 9094
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: kafka-nginx-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-nginx-lb
+  namespace: kafka
+spec:
+  type: LoadBalancer
+  selector:
+    app: kafka-nginx
+  ports:
+    - name: kafka
+      port: 9094
+      targetPort: 9094
